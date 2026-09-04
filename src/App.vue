@@ -395,26 +395,49 @@ const clearRecords = () => {
   }
 };
 
+function parseWeight(inputText) {
+  // 1. 排除明確不是體重的單位與文字（例如：分鐘、公里、步、元、歲、cm...）
+  if (/(分鐘|分|公里|km|m|步|元|塊|歲|年|月|日|號|cm|公分)/i.test(inputText)) {
+    // 若文字中帶有其他單位，但完全沒有寫到「kg/公斤/體重」，則直接忽略
+    if (!/(kg|公斤|體重|重)/i.test(inputText)) {
+      return null;
+    }
+  }
+
+  // 2. 精確捕捉體重：尋找「體重/重/公斤/kg」旁邊的數字
+  const keywordMatch = inputText.match(
+    /(?:體重|重|是)?\s*(\d{2,3}(?:\.\d{1,2})?)\s*(?:kg|公斤|公斤重)?/i,
+  );
+
+  if (keywordMatch && keywordMatch[1]) {
+    const val = parseFloat(keywordMatch[1]);
+    // 限制合理的體重範圍，避免非體重數字誤入
+    if (val >= 30 && val <= 200) {
+      return val; // 直接回傳解析出來的數字
+    }
+  }
+
+  return null;
+}
+
 // 自動解析體重與時間格式化
 const extractAndSaveWeight = (text) => {
-  const match = text.match(/(\d{2,3}(\.\d{1,2})?)/);
-  if (match) {
-    const weightNum = parseFloat(match[1]);
-    if (weightNum >= 30 && weightNum <= 200) {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, "0");
-      const date = String(now.getDate()).padStart(2, "0");
-      const hours = String(now.getHours()).padStart(2, "0");
-      const minutes = String(now.getMinutes()).padStart(2, "0");
+  const weightNum = parseWeight(text); // ✅ 直接接收數字或 null
 
-      const timeStr = `${year}/${month}/${date} ${hours}:${minutes}`;
+  if (weightNum !== null) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const date = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
 
-      weightRecords.value.push({
-        date: timeStr,
-        weight: weightNum,
-      });
-    }
+    const timeStr = `${year}/${month}/${date} ${hours}:${minutes}`;
+
+    weightRecords.value.push({
+      date: timeStr,
+      weight: weightNum,
+    });
   }
 };
 
@@ -424,6 +447,7 @@ const sendMessage = async () => {
 
   const userText = inputMessage.value.trim();
 
+  // 1. 解析並紀錄體重
   extractAndSaveWeight(userText);
 
   messages.value.push({ role: "user", content: userText });
@@ -458,6 +482,7 @@ const sendMessage = async () => {
       parts: [{ text: m.content }],
     }));
 
+    // 2. 修正 API 模型名稱 (gemini-1.5-flash)
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
       {
